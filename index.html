@@ -1,0 +1,742 @@
+```html
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D20X</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    animation: {
+                        'dice-shake': 'shake 0.4s ease-in-out infinite',
+                        'pop-in': 'popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    },
+                    keyframes: {
+                        shake: {
+                            '0%, 100%': { transform: 'rotate(0deg) scale(1)' },
+                            '25%': { transform: 'rotate(-8deg) scale(1.05)' },
+                            '75%': { transform: 'rotate(8deg) scale(0.95)' },
+                        },
+                        popIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.8)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbars and styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.7);
+        }
+        .die-badge {
+            transition: all 0.2s ease;
+        }
+        .die-badge:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-full flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+    <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-4 py-3">
+        <div class="max-w-5xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                        D20X
+                    </h1>
+                    <p class="text-xs text-slate-400">Simulador & Rolador D&D / RPG de Mesa</p>
+                </div>
+            </div>
+
+            <!-- Controls (Sound & Clear) -->
+            <div class="flex items-center space-x-2">
+                <button id="soundToggleBtn" onclick="toggleSound()" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-2 text-xs font-semibold" title="Alternar Som">
+                    <svg id="soundIconOn" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                    </svg>
+                    <svg id="soundIconOff" class="w-4 h-4 text-slate-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                    <span class="hidden sm:inline" id="soundLabel">Som Ligado</span>
+                </button>
+
+                <button onclick="askClearHistory()" class="p-2.5 rounded-xl bg-slate-800 hover:bg-red-900/30 hover:text-red-400 text-slate-300 transition-colors flex items-center gap-1.5 text-xs font-semibold" title="Limpar Histórico">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    <span class="hidden sm:inline">Limpar Histórico</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 my-auto">
+
+        <!-- CALCULATOR SECTION (Left 7 Cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- CALCULATOR DISPLAY SCREEN -->
+            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+                <!-- Color Legend Header -->
+                <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-900 pb-2 mb-2">
+                    <span class="text-slate-500 uppercase tracking-wider font-sans font-semibold">Legenda de Cores:</span>
+                    <div class="flex items-center space-x-3">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> 1 = Crítico Min</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Max = Crítico Max</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block"></span> Outros</span>
+                    </div>
+                </div>
+
+                <!-- Formula Input Row -->
+                <div class="flex items-center justify-between gap-2">
+                    <input type="text" id="calcDisplay" 
+                        class="w-full bg-transparent font-mono text-2xl md:text-3xl text-indigo-300 font-bold focus:outline-none placeholder-slate-600 tracking-wide"
+                        placeholder="Ex: 3d20 + 5" 
+                        autocomplete="off"
+                        onkeydown="handleKeyPress(event)"
+                    />
+                    <button onclick="backspace()" class="text-slate-500 hover:text-slate-300 p-2 rounded-lg transition-colors" title="Apagar último caractere">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2 2m-2-2l2-2m7 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Roll Result Section -->
+                <div id="resultContainer" class="mt-4 pt-3 border-t border-slate-800/80 min-h-[90px] flex flex-col justify-end">
+                    <div class="text-xs font-semibold text-slate-500 mb-1 flex justify-between items-center">
+                        <span>ÚLTIMO RESULTADO:</span>
+                        <span id="timestampText" class="font-mono text-[10px] text-slate-600">--:--:--</span>
+                    </div>
+
+                    <div id="resultContent" class="flex flex-col gap-2">
+                        <div class="text-slate-500 italic text-sm">Digite uma expressão e pressione Rolar (=)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CALCULATOR KEYPAD -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 shadow-xl backdrop-blur-sm">
+                
+                <!-- Quick Preset Dice Bar -->
+                <div class="mb-4">
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Dados Rápidos:</label>
+                    <div class="grid grid-cols-7 gap-2">
+                        <button onclick="appendDice('d4')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d4</button>
+                        <button onclick="appendDice('d6')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d6</button>
+                        <button onclick="appendDice('d8')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d8</button>
+                        <button onclick="appendDice('d10')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d10</button>
+                        <button onclick="appendDice('d12')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d12</button>
+                        <button onclick="appendDice('d20')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d20</button>
+                        <button onclick="appendDice('d100')" class="die-btn bg-slate-800/90 hover:bg-indigo-600 hover:text-white text-indigo-300 border border-slate-700/60 font-mono font-bold py-2 rounded-xl text-sm transition-all shadow-sm active:scale-95">d100</button>
+                    </div>
+                </div>
+
+                <!-- Macros / Special RPG keys -->
+                <div class="grid grid-cols-3 gap-2 mb-3">
+                    <button onclick="insertMacro('2d20kh1')" class="bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/50 text-indigo-300 py-1.5 rounded-xl text-xs font-semibold transition-all">
+                        ✨ Vantagem (2d20kh1)
+                    </button>
+                    <button onclick="insertMacro('2d20kl1')" class="bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/50 text-amber-300 py-1.5 rounded-xl text-xs font-semibold transition-all">
+                        💀 Desvantagem (2d20kl1)
+                    </button>
+                    <button onclick="insertMacro('4d6d1')" class="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 py-1.5 rounded-xl text-xs font-semibold transition-all">
+                        🛡️ Atributo (4d6d1)
+                    </button>
+                </div>
+
+                <!-- Calculator Numpad Grid -->
+                <div class="grid grid-cols-4 gap-2">
+                    <!-- Row 1 -->
+                    <button onclick="clearCalc()" class="bg-red-950/60 hover:bg-red-900 border border-red-800/60 text-red-300 font-bold py-3.5 rounded-xl text-lg transition-all active:scale-95 shadow-md">C</button>
+                    <button onclick="appendChar('(')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono font-bold py-3.5 rounded-xl text-lg transition-all active:scale-95">(</button>
+                    <button onclick="appendChar(')')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono font-bold py-3.5 rounded-xl text-lg transition-all active:scale-95">)</button>
+                    <button onclick="appendChar('/')" class="bg-slate-800/80 hover:bg-slate-700 text-indigo-400 font-mono font-bold py-3.5 rounded-xl text-lg transition-all active:scale-95">÷</button>
+
+                    <!-- Row 2 -->
+                    <button onclick="appendChar('7')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">7</button>
+                    <button onclick="appendChar('8')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">8</button>
+                    <button onclick="appendChar('9')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">9</button>
+                    <button onclick="appendChar('*')" class="bg-slate-800/80 hover:bg-slate-700 text-indigo-400 font-mono font-bold py-3.5 rounded-xl text-lg transition-all active:scale-95">×</button>
+
+                    <!-- Row 3 -->
+                    <button onclick="appendChar('4')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">4</button>
+                    <button onclick="appendChar('5')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">5</button>
+                    <button onclick="appendChar('6')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">6</button>
+                    <button onclick="appendChar('-')" class="bg-slate-800/80 hover:bg-slate-700 text-indigo-400 font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">-</button>
+
+                    <!-- Row 4 -->
+                    <button onclick="appendChar('1')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">1</button>
+                    <button onclick="appendChar('2')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">2</button>
+                    <button onclick="appendChar('3')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">3</button>
+                    <button onclick="appendChar('+')" class="bg-slate-800/80 hover:bg-slate-700 text-indigo-400 font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">+</button>
+
+                    <!-- Row 5 -->
+                    <button onclick="appendChar('0')" class="bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold py-3.5 rounded-xl text-xl transition-all active:scale-95">0</button>
+                    <button onclick="appendChar('d')" class="bg-gradient-to-tr from-violet-700 to-indigo-600 hover:from-violet-600 hover:to-indigo-500 text-white font-mono font-extrabold py-3.5 rounded-xl text-xl transition-all active:scale-95 shadow-md shadow-indigo-500/20">d</button>
+                    
+                    <!-- ROLL BUTTON (=) -->
+                    <button id="rollBtn" onclick="executeRoll()" class="col-span-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold py-3.5 rounded-xl text-lg transition-all transform active:scale-95 shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+                        <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        ROLAR DADOS (=)
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- HISTORY & STATS SECTION (Right 5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- STATS SUMMARY CARD -->
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-center">
+                    <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Rolado</span>
+                    <span id="statTotalRolls" class="text-xl font-extrabold text-white font-mono">0</span>
+                </div>
+                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-center">
+                    <span class="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Críticos Max</span>
+                    <span id="statMaxCrits" class="text-xl font-extrabold text-emerald-400 font-mono">0</span>
+                </div>
+                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-center">
+                    <span class="block text-[10px] font-bold text-red-400 uppercase tracking-wider">Falhas (1)</span>
+                    <span id="statMinCrits" class="text-xl font-extrabold text-red-400 font-mono">0</span>
+                </div>
+            </div>
+
+            <!-- HISTÓRICO DE ROLAGENS -->
+            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex-1 flex flex-col shadow-xl min-h-[320px] max-h-[500px]">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                    <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Histórico de Rolagens
+                    </h2>
+                    <span id="historyCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">0</span>
+                </div>
+
+                <!-- History Items Scroll Container -->
+                <div id="historyList" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                    <div id="emptyHistory" class="text-center text-slate-500 text-xs py-12 italic">
+                        Nenhuma rolagem registrada ainda.<br>Use a calculadora para rolar!
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- CLEAR HISTORY CONFIRM -->
+    <div id="clearConfirmModal" class="hidden fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <button type="button" onclick="closeClearConfirm()" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" aria-label="Fechar confirmação"></button>
+        <div class="relative w-full max-w-sm bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-2xl">
+            <h2 class="text-base font-bold text-slate-100">Limpar histórico?</h2>
+            <p class="mt-2 text-sm text-slate-400">
+                Isso apaga as rolagens e as estatísticas desta sessão. Não dá para desfazer.
+            </p>
+            <div class="mt-5 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeClearConfirm()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors">
+                    Cancelar
+                </button>
+                <button type="button" onclick="confirmClearHistory()" class="px-3.5 py-2 rounded-xl bg-red-700 hover:bg-red-600 text-white text-sm font-semibold transition-colors">
+                    Limpar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800/80 bg-slate-950/40 text-center py-3 text-xs text-slate-500">
+        Simulador de Rolagem de Dados &bull; Regra de Cores: <span class="text-red-400 font-semibold">1 (Vermelho)</span> | <span class="text-emerald-400 font-semibold">Máximo (Verde)</span> | <span class="text-slate-300 font-semibold">Demais (Preto/Neutro)</span>
+    </footer>
+
+    <script>
+        /* Web Audio API Synthesizer for Dice Sound Effects */
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+        }
+
+        function playDiceRollSound() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+
+                // Play a series of randomized clicking/clacking noise bursts to simulate dice tumbling
+                const now = audioCtx.currentTime;
+                const numClacks = 4 + Math.floor(Math.random() * 4);
+
+                for (let i = 0; i < numClacks; i++) {
+                    const time = now + (i * 0.05) + (Math.random() * 0.02);
+                    
+                    // Buffer noise generator
+                    const bufferSize = audioCtx.sampleRate * 0.03; // 30ms
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let j = 0; j < bufferSize; j++) {
+                        data[j] = Math.random() * 2 - 1;
+                    }
+
+                    const noise = audioCtx.createBufferSource();
+                    noise.buffer = buffer;
+
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 800 + Math.random() * 1200;
+                    filter.Q.value = 3;
+
+                    const gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(0.3, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    noise.start(time);
+                }
+            } catch (e) {
+                console.log("Audio playback not supported or blocked", e);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const iconOn = document.getElementById('soundIconOn');
+            const iconOff = document.getElementById('soundIconOff');
+            const label = document.getElementById('soundLabel');
+
+            if (soundEnabled) {
+                iconOn.classList.remove('hidden');
+                iconOff.classList.add('hidden');
+                label.innerText = 'Som Ligado';
+            } else {
+                iconOn.classList.add('hidden');
+                iconOff.classList.remove('hidden');
+                label.innerText = 'Som Mudo';
+            }
+        }
+
+        let rollHistory = [];
+        let totalRollsCount = 0;
+        let totalMaxCrits = 0;
+        let totalMinCrits = 0;
+
+        const calcDisplay = document.getElementById('calcDisplay');
+
+        function appendChar(char) {
+            calcDisplay.value += char;
+            calcDisplay.focus();
+        }
+
+        function appendDice(dieType) {
+            const val = calcDisplay.value.trim();
+            // If empty or ends with an operator, append 1 + dieType (e.g. 1d20)
+            if (val === '' || /[+\-*/(]\s*$/.test(val)) {
+                calcDisplay.value += `1${dieType}`;
+            } else if (/\d+$/.test(val)) {
+                // If it ends with a number (e.g., 3), append dieType -> 3d20
+                calcDisplay.value += dieType;
+            } else {
+                calcDisplay.value += `+1${dieType}`;
+            }
+            calcDisplay.focus();
+        }
+
+        function insertMacro(macro) {
+            calcDisplay.value = macro;
+            calcDisplay.focus();
+        }
+
+        function clearCalc() {
+            calcDisplay.value = '';
+            calcDisplay.focus();
+        }
+
+        function backspace() {
+            calcDisplay.value = calcDisplay.value.slice(0, -1);
+            calcDisplay.focus();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                executeRoll();
+            }
+        }
+
+        /**
+         * Parses dice expressions like "3d20", "2d6+4", "4d6d1", "2d20kh1"
+         * Returns an object with final total sum, individual dice rolls, and details.
+         */
+        function parseAndRollExpression(inputStr) {
+            // Clean string
+            let expr = inputStr.toLowerCase().replace(/\s+/g, '');
+            if (!expr) return null;
+
+            let allDiceDetails = []; // Keep track of each rolled die
+            let expandedExpr = expr;
+
+            // Regex for matching dice notation: (X)d(Y)[kh|kl|d|dh|dl](Z)
+            // Example: 3d20, d6, 4d6d1 (drop lowest 1), 2d20kh1 (keep highest 1)
+            const diceRegex = /(\d*)d(\d+)(kh\d+|kl\d+|dh\d+|dl\d+|d\d+)?/gi;
+
+            expandedExpr = expandedExpr.replace(diceRegex, (match, countStr, sidesStr, modifier) => {
+                const count = countStr === '' ? 1 : parseInt(countStr, 10);
+                const sides = parseInt(sidesStr, 10);
+
+                if (count <= 0 || sides <= 0 || count > 200 || sides > 1000) {
+                    throw new Error("Quantidade ou lados do dado fora do limite (máx 200d1000)");
+                }
+
+                // Roll individual dice
+                let rawRolls = [];
+                for (let i = 0; i < count; i++) {
+                    const rollVal = Math.floor(Math.random() * sides) + 1;
+                    rawRolls.push(rollVal);
+                }
+
+                // Determine kept vs dropped dice if modifier exists
+                let keptFlags = new Array(count).fill(true);
+
+                if (modifier) {
+                    const modType = modifier.match(/^[a-z]+/i)[0];
+                    const modNum = parseInt(modifier.replace(/^[a-z]+/i, ''), 10) || 1;
+
+                    // Indexed rolls for sorting
+                    let indexed = rawRolls.map((val, idx) => ({ val, idx }));
+
+                    if (modType === 'kh' || modType === 'dh') { 
+                        // Keep highest N or drop highest N
+                        indexed.sort((a, b) => b.val - a.val);
+                        if (modType === 'kh') {
+                            // keep highest modNum
+                            indexed.forEach((item, rank) => {
+                                keptFlags[item.idx] = rank < modNum;
+                            });
+                        } else {
+                            // drop highest modNum
+                            indexed.forEach((item, rank) => {
+                                keptFlags[item.idx] = rank >= modNum;
+                            });
+                        }
+                    } else if (modType === 'kl' || modType === 'd' || modType === 'dl') {
+                        // Keep lowest N or drop lowest N
+                        indexed.sort((a, b) => a.val - b.val);
+                        if (modType === 'kl') {
+                            // keep lowest modNum
+                            indexed.forEach((item, rank) => {
+                                keptFlags[item.idx] = rank < modNum;
+                            });
+                        } else {
+                            // drop lowest modNum
+                            indexed.forEach((item, rank) => {
+                                keptFlags[item.idx] = rank >= modNum;
+                            });
+                        }
+                    }
+                }
+
+                // Collect details for each individual die
+                let sumForThisGroup = 0;
+                rawRolls.forEach((value, idx) => {
+                    const isKept = keptFlags[idx];
+                    if (isKept) sumForThisGroup += value;
+
+                    // Update critical hit stats
+                    if (value === 1) totalMinCrits++;
+                    if (value === sides) totalMaxCrits++;
+
+                    allDiceDetails.push({
+                        sides: sides,
+                        value: value,
+                        isMin: value === 1,
+                        isMax: value === sides,
+                        isKept: isKept
+                    });
+                });
+
+                return sumForThisGroup;
+            });
+
+            // Safely evaluate remaining simple arithmetic expression
+            // Replace non-allowed characters for security
+            if (/[^0-9+\-*/().]/.test(expandedExpr)) {
+                throw new Error("Expressão inválida");
+            }
+
+            // Evaluate math safely using Function constructor
+            let totalResult;
+            try {
+                totalResult = new Function(`'use strict'; return (${expandedExpr})`)();
+            } catch (err) {
+                throw new Error("Erro de sintaxe matemática na expressão");
+            }
+
+            return {
+                rawExpression: inputStr,
+                total: totalResult,
+                dice: allDiceDetails
+            };
+        }
+
+        function executeRoll() {
+            const inputVal = calcDisplay.value.trim();
+            if (!inputVal) return;
+
+            const rollBtn = document.getElementById('rollBtn');
+            const resultContent = document.getElementById('resultContent');
+
+            // Play dice sound
+            playDiceRollSound();
+
+            // Button shake animation
+            rollBtn.classList.add('animate-dice-shake');
+            setTimeout(() => rollBtn.classList.remove('animate-dice-shake'), 400);
+
+            try {
+                const rollResult = parseAndRollExpression(inputVal);
+                if (!rollResult) return;
+
+                const timestamp = new Date().toLocaleTimeString();
+                document.getElementById('timestampText').innerText = timestamp;
+
+                // Render result on screen
+                renderResultDisplay(rollResult);
+
+                // Add to history
+                addHistoryRecord(rollResult, timestamp);
+
+                // Update statistics
+                totalRollsCount++;
+                updateStatsUI();
+
+            } catch (err) {
+                resultContent.innerHTML = `
+                    <div class="text-red-400 bg-red-950/40 border border-red-800/60 rounded-xl p-3 text-sm flex items-center gap-2">
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>${err.message || 'Expressão de dados inválida'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * Helper to render colored badges for individual dice
+         * Color Rules:
+         * - 1 -> RED
+         * - MAX (sides) -> GREEN
+         * - OTHERS -> BLACK (or dark neutral on light, light neutral on dark screen)
+         */
+        function getDieBadgeHTML(die) {
+            let colorClasses = "";
+            let tagTitle = `Dado de ${die.sides} lados`;
+
+            if (!die.isKept) {
+                // Dropped die styling
+                colorClasses = "bg-slate-900 text-slate-600 line-through border-slate-800 opacity-50";
+                tagTitle += " (Descartado)";
+            } else if (die.isMin) {
+                // RULE: Result = 1 -> RED
+                colorClasses = "bg-red-600 text-white border-red-400 font-extrabold shadow-lg shadow-red-600/30 ring-2 ring-red-400/50";
+                tagTitle += " - Falha Crítica (1)";
+            } else if (die.isMax) {
+                // RULE: Result = Max -> GREEN
+                colorClasses = "bg-emerald-500 text-slate-950 border-emerald-300 font-extrabold shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-300/50";
+                tagTitle += " - Sucesso Crítico (MÁXIMO)";
+            } else {
+                // RULE: Other results -> BLACK / Neutral standard
+                colorClasses = "bg-slate-200 text-slate-900 border-slate-300 font-bold dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700";
+            }
+
+            return `
+                <span title="${tagTitle}" class="die-badge inline-flex items-center justify-center min-w-[36px] h-9 px-2.5 rounded-xl border font-mono text-base transition-all ${colorClasses}">
+                    ${die.value}
+                    <span class="text-[9px] opacity-60 ml-0.5">d${die.sides}</span>
+                </span>
+            `;
+        }
+
+        function renderResultDisplay(result) {
+            const resultContent = document.getElementById('resultContent');
+
+            let diceBadgesHTML = '';
+            if (result.dice.length > 0) {
+                diceBadgesHTML = `
+                    <div class="flex flex-wrap gap-1.5 my-1 max-h-[90px] overflow-y-auto p-1">
+                        ${result.dice.map(die => getDieBadgeHTML(die)).join('')}
+                    </div>
+                `;
+            } else {
+                diceBadgesHTML = `<span class="text-xs text-slate-500 italic">Constante matemática (sem rolagens de dados)</span>`;
+            }
+
+            resultContent.innerHTML = `
+                <div class="animate-pop-in flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <!-- Total Number -->
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-xs text-slate-400 uppercase font-bold">TOTAL:</span>
+                        <span class="text-4xl md:text-5xl font-black font-mono text-white tracking-tight">${result.total}</span>
+                    </div>
+
+                    <!-- Individual Rolls -->
+                    <div class="flex-1 md:text-right">
+                        <span class="text-[11px] text-slate-400 font-semibold block mb-0.5">Rolagens Individuais:</span>
+                        ${diceBadgesHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        function addHistoryRecord(result, timestamp) {
+            rollHistory.unshift({ result, timestamp });
+
+            const historyList = document.getElementById('historyList');
+            const emptyHistory = document.getElementById('emptyHistory');
+
+            if (emptyHistory) {
+                emptyHistory.remove();
+            }
+
+            const item = document.createElement('div');
+            item.className = "bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3 transition-all flex items-center justify-between gap-3 group animate-pop-in";
+
+            let miniBadgesHTML = result.dice.slice(0, 8).map(die => {
+                let badgeColor = "bg-slate-800 text-slate-200 border-slate-700";
+                if (!die.isKept) badgeColor = "bg-slate-950 text-slate-600 line-through border-slate-900";
+                else if (die.isMin) badgeColor = "bg-red-600 text-white border-red-500 font-bold";
+                else if (die.isMax) badgeColor = "bg-emerald-500 text-slate-950 border-emerald-400 font-bold";
+
+                return `<span class="text-xs font-mono px-1.5 py-0.5 rounded border ${badgeColor}">${die.value}</span>`;
+            }).join(' ');
+
+            if (result.dice.length > 8) {
+                miniBadgesHTML += `<span class="text-[10px] text-slate-500 font-mono">+${result.dice.length - 8}</span>`;
+            }
+
+            item.innerHTML = `
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="font-mono text-xs text-indigo-300 font-bold truncate">${result.rawExpression}</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${timestamp}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1 items-center">
+                        ${miniBadgesHTML}
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <div class="text-right">
+                        <span class="text-[10px] text-slate-500 block">TOTAL</span>
+                        <span class="font-mono text-xl font-extrabold text-white">${result.total}</span>
+                    </div>
+                    <button onclick="reRoll('${result.rawExpression}')" class="p-1.5 rounded-lg bg-slate-800 group-hover:bg-indigo-600 text-slate-400 group-hover:text-white transition-colors" title="Rolar novamente">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            historyList.insertBefore(item, historyList.firstChild);
+            document.getElementById('historyCount').innerText = rollHistory.length;
+        }
+
+        function reRoll(expr) {
+            calcDisplay.value = expr;
+            executeRoll();
+        }
+
+        function askClearHistory() {
+            if (!rollHistory.length && totalRollsCount === 0) return;
+            document.getElementById('clearConfirmModal').classList.remove('hidden');
+        }
+
+        function closeClearConfirm() {
+            document.getElementById('clearConfirmModal').classList.add('hidden');
+        }
+
+        function confirmClearHistory() {
+            closeClearConfirm();
+            clearHistory();
+        }
+
+        function clearHistory() {
+            rollHistory = [];
+            totalRollsCount = 0;
+            totalMaxCrits = 0;
+            totalMinCrits = 0;
+
+            document.getElementById('historyList').innerHTML = `
+                <div id="emptyHistory" class="text-center text-slate-500 text-xs py-12 italic">
+                    Nenhuma rolagem registrada ainda.<br>Use a calculadora para rolar!
+                </div>
+            `;
+            document.getElementById('historyCount').innerText = '0';
+            updateStatsUI();
+        }
+
+        function updateStatsUI() {
+            document.getElementById('statTotalRolls').innerText = totalRollsCount;
+            document.getElementById('statMaxCrits').innerText = totalMaxCrits;
+            document.getElementById('statMinCrits').innerText = totalMinCrits;
+        }
+
+        // Auto focus input on load
+        window.onload = function() {
+            calcDisplay.focus();
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') closeClearConfirm();
+            });
+        };
+    </script>
+</body>
+</html>
+```

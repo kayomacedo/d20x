@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "build": 1,
+  "apkUrl": "/apk/d20x.apk",
+  "notes": "Primeira versão do D20X.",
+  "force": false
+}

@@ -1,0 +1,25 @@
+# dependencies / build
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+mobile/.kotlin/
+mobile/*.tsbuildinfo
+mobile/expo-env.d.ts
+
+# os / secrets
+.DS_Store
+.env
+.env.*
+.env*.local
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# APKs grandes ficam de fora até você publicar de propósito
+updates/apk/*.apk
