@@ -66,6 +66,8 @@
           "photosPermission": "O D20X usa uma foto sua para o perfil na sala."
         }
       ],
+      [
+        "expo-splash-screen",
         {
           "backgroundColor": "#0f172a",
           "image": "./assets/splash-icon.png",
