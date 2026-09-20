@@ -21,5 +21,8 @@ mobile/expo-env.d.ts
 *.key
 *.mobileprovision
 
-# APKs grandes ficam de fora até você publicar de propósito
+# APKs grandes ficam de fora, menos o arquivo publicado na Vercel
 updates/apk/*.apk
+!updates/apk/d20x.apk
+
+.vercel
