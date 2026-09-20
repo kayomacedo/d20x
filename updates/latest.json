@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
-  "build": 2,
+  "version": "1.0.2",
+  "build": 3,
   "apkUrl": "/apk/d20x.apk",
-  "notes": "A sala não cai mais ao compartilhar o código. Toque copia, segure ou toque duas vezes para enviar.",
+  "notes": "Nome da sala separado do seu perfil. Foto na mesa, visor ajustado, dados customizados e avisos quando alguém rola.",
   "force": false
 }
