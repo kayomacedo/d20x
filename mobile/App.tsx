@@ -27,7 +27,7 @@ import { UpdateModal } from './src/components/UpdateModal';
 import { appendDiceToExpression, parseAndRollExpression } from './src/dice';
 import { capHistory, newHistoryItem } from './src/history';
 import { formatTotal, totalFontSize } from './src/format';
-import { createPlayerId, normalizeRoomCode, useRoom } from './src/room';
+import { createPlayerId, isRoomOpen, normalizeRoomCode, useRoom } from './src/room';
 import { roomCodeFromUrl, writeRoomCodeToUrl } from './src/share';
 import {
   MULTI_SOUNDS,
@@ -114,7 +114,7 @@ function DiceApp({
   }, []);
 
   useEffect(() => {
-    if (room.status === 'joined' && room.code) writeRoomCodeToUrl(room.code);
+    if (isRoomOpen(room.status) && room.code) writeRoomCodeToUrl(room.code);
   }, [room.status, room.code]);
 
   useEffect(() => {
@@ -383,13 +383,14 @@ function DiceApp({
           onCreate={() => room.create(playerName)}
           onJoin={() => room.join(joinCode, playerName)}
           onLeave={room.leave}
+          onReconnect={room.reconnect}
         />
       ) : (
       <ScrollView
         contentContainerStyle={[styles.content, { padding: layout.screenPad }]}
         keyboardShouldPersistTaps="handled"
       >
-        {room.status === 'joined' && room.code ? (
+        {isRoomOpen(room.status) && room.code ? (
           <Pressable style={styles.roomBanner} onPress={() => setTab('room')}>
             <Text style={styles.roomBannerText} numberOfLines={1}>
               Sala {room.code} · {room.players.length} jogador{room.players.length === 1 ? '' : 'es'}
@@ -551,7 +552,7 @@ function DiceApp({
         >
           <Ionicons name="people-outline" size={15} color={tab === 'room' ? colors.text : colors.faint} />
           <Text style={[styles.tabText, tab === 'room' && styles.tabTextActive]}>Sala</Text>
-          {room.status === 'joined' ? (
+          {isRoomOpen(room.status) ? (
             <View style={styles.tabBadge}>
               <Text style={styles.tabBadgeText}>{room.players.length}</Text>
             </View>

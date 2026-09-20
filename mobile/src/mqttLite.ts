@@ -100,6 +100,7 @@ export function connectMqttRoom(options: ConnectOptions, handlers: MqttHandlers 
     let packetId = 1;
     let pingTimer: ReturnType<typeof setInterval> | undefined;
     let settled = false;
+    let closedByClient = false;
     let buffer = new Uint8Array(0);
     const timer = setTimeout(() => fail(new Error('Tempo esgotado ao abrir a sala')), 8000);
 
@@ -170,6 +171,7 @@ export function connectMqttRoom(options: ConnectOptions, handlers: MqttHandlers 
             send(packet(0x30 | (retain ? 1 : 0), variable));
           },
           disconnect() {
+            closedByClient = true;
             cleanup();
             try {
               send(new Uint8Array([0xe0, 0x00]));
@@ -242,7 +244,7 @@ export function connectMqttRoom(options: ConnectOptions, handlers: MqttHandlers 
         fail(new Error('Não foi possível abrir a sala'));
         return;
       }
-      handlers.onClose?.();
+      if (!closedByClient) handlers.onClose?.();
     };
   });
 }

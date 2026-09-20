@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { formatBreakdownLine, formatRollWhen, formatTotal } from '../format';
-import { shareRoomCode } from '../share';
+import { copyRoomCode, shareRoomCode } from '../share';
 import { radius, useThemedStyles, type ThemeColors } from '../theme';
-import type { RoomPlayer, RoomRoll, RoomStatus } from '../room';
+import { isRoomOpen, type RoomPlayer, type RoomRoll, type RoomStatus } from '../room';
 
 type Props = {
   playerName: string;
@@ -19,6 +19,7 @@ type Props = {
   onCreate: () => void;
   onJoin: () => void;
   onLeave: () => void;
+  onReconnect: () => void;
 };
 
 function PlayerChip({ player, self }: { player: RoomPlayer; self: boolean }) {
@@ -46,19 +47,43 @@ export function RoomPanel({
   onCreate,
   onJoin,
   onLeave,
+  onReconnect,
 }: Props) {
   const styles = useThemedStyles(createStyles);
-  const joined = status === 'joined' && code;
+  const joined = isRoomOpen(status) && code;
   const busy = status === 'connecting';
   const [copied, setCopied] = useState(false);
+  const lastTapRef = useRef(0);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const shareCode = () => {
+  const copyCode = () => {
     if (!code) return;
-    shareRoomCode(code).then((result) => {
-      if (result !== 'copied') return;
+    copyRoomCode(code).then((ok) => {
+      if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     });
+  };
+
+  const openShare = () => {
+    if (!code) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    lastTapRef.current = 0;
+    shareRoomCode(code).finally(() => onReconnect());
+  };
+
+  const onCodePress = () => {
+    if (!code) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      lastTapRef.current = 0;
+      openShare();
+      return;
+    }
+    lastTapRef.current = now;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(copyCode, 320);
   };
 
   if (joined) {
@@ -68,7 +93,9 @@ export function RoomPanel({
           <View style={styles.toolbarText}>
             <Text style={styles.title}>Sala {code}</Text>
             <Text style={styles.subtitle}>
-              {players.length} jogador{players.length === 1 ? '' : 'es'} · role no Rolador
+              {status === 'reconnecting'
+                ? 'Reconectando à mesa...'
+                : `${players.length} jogador${players.length === 1 ? '' : 'es'} · role no Rolador`}
             </Text>
           </View>
           <Pressable style={styles.leaveBtn} onPress={onLeave}>
@@ -77,17 +104,18 @@ export function RoomPanel({
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Pressable style={styles.codeCard} onPress={shareCode}>
+          <Pressable
+            style={styles.codeCard}
+            onPress={onCodePress}
+            onLongPress={openShare}
+            delayLongPress={350}
+          >
             <Text style={styles.codeLabel}>Código da sala</Text>
-            <Text style={styles.codeValue} selectable>
-              {code}
-            </Text>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeValue}>{code}</Text>
+            </View>
             <Text style={styles.codeHint}>
-              {copied
-                ? 'Código copiado'
-                : Platform.OS === 'web'
-                  ? 'Clique para copiar o link da sala'
-                  : 'Toque para enviar o código'}
+              {copied ? 'Código copiado' : 'Toque para copiar · segure ou toque 2x para enviar'}
             </Text>
           </Pressable>
 
@@ -327,15 +355,25 @@ function createStyles(colors: ThemeColors) {
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.xl,
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
   },
   codeLabel: {
     color: colors.faint,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  codeBox: {
+    minWidth: '72%',
+    borderColor: colors.indigoStrong,
+    borderWidth: 2,
+    borderRadius: 16,
+    backgroundColor: colors.keypad,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   codeValue: {
     color: colors.white,

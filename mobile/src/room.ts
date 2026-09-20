@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { connectMqttRoom, type MqttClient } from './mqttLite';
 import type { DiceGroup, DieRoll, RollResult } from './types';
 
@@ -15,7 +16,11 @@ export type RoomRoll = {
   createdAt: number;
 };
 
-export type RoomStatus = 'idle' | 'connecting' | 'joined' | 'error';
+export type RoomStatus = 'idle' | 'connecting' | 'reconnecting' | 'joined' | 'error';
+
+export function isRoomOpen(status: RoomStatus): boolean {
+  return status === 'joined' || status === 'reconnecting';
+}
 
 const BROKERS = [
   { url: 'wss://broker.emqx.io:8084/mqtt', protocol: 'mqtt' },
@@ -146,7 +151,9 @@ export function useRoom(playerId: string) {
   const clientRef = useRef<MqttClient | null>(null);
   const codeRef = useRef<string | null>(null);
   const nameRef = useRef('');
+  const intendedRef = useRef<{ code: string; name: string; create: boolean } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const metaWaitRef = useRef<((found: boolean) => void) | null>(null);
   const metaSeenRef = useRef(false);
   const sessionRef = useRef(0);
@@ -156,13 +163,35 @@ export function useRoom(playerId: string) {
     heartbeatRef.current = undefined;
   };
 
+  const clearReconnect = () => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = undefined;
+  };
+
   const resetLocal = () => {
     clearHeartbeat();
+    clearReconnect();
     clientRef.current = null;
     codeRef.current = null;
+    intendedRef.current = null;
     setCode(null);
     setPlayers([]);
     setRolls([]);
+  };
+
+  const dropClient = () => {
+    sessionRef.current += 1;
+    clearHeartbeat();
+    clearReconnect();
+    const client = clientRef.current;
+    clientRef.current = null;
+    if (client) {
+      try {
+        client.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
   };
 
   const handleMessage = useCallback((topic: string, payload: string) => {
@@ -223,7 +252,6 @@ export function useRoom(playerId: string) {
   }, []);
 
   const leave = useCallback(() => {
-    sessionRef.current += 1;
     const currentCode = codeRef.current;
     const client = clientRef.current;
     if (client && currentCode) {
@@ -232,15 +260,15 @@ export function useRoom(playerId: string) {
       } catch {
         /* ignore */
       }
-      client.disconnect();
     }
+    dropClient();
     resetLocal();
     setStatus('idle');
     setError(null);
   }, [playerId]);
 
   const enter = useCallback(
-    async (rawCode: string, rawName: string, create: boolean) => {
+    async (rawCode: string, rawName: string, create: boolean, resume = false) => {
       const nextCode = normalizeRoomCode(rawCode);
       const name = normalizePlayerName(rawName);
       if (name.length < 2) {
@@ -254,17 +282,22 @@ export function useRoom(playerId: string) {
         return;
       }
 
-      leave();
+      if (resume) dropClient();
+      else leave();
+
       const session = sessionRef.current + 1;
       sessionRef.current = session;
       nameRef.current = name;
       codeRef.current = nextCode;
-      setStatus('connecting');
+      intendedRef.current = { code: nextCode, name, create };
+      setStatus(resume ? 'reconnecting' : 'connecting');
       setError(null);
       setCode(nextCode);
-      setPlayers([{ id: playerId, name }]);
-      setRolls([]);
-      metaSeenRef.current = false;
+      if (!resume) {
+        setPlayers([{ id: playerId, name }]);
+        setRolls([]);
+        metaSeenRef.current = false;
+      }
 
       try {
         const client = await openBroker(
@@ -274,9 +307,16 @@ export function useRoom(playerId: string) {
           handleMessage,
           () => {
             if (sessionRef.current !== session) return;
-            resetLocal();
-            setStatus('error');
-            setError('A sala caiu. Entre de novo com o código.');
+            if (!intendedRef.current) return;
+            clientRef.current = null;
+            clearHeartbeat();
+            setStatus('reconnecting');
+            clearReconnect();
+            reconnectTimerRef.current = setTimeout(() => {
+              const next = intendedRef.current;
+              if (!next || sessionRef.current !== session) return;
+              enter(next.code, next.name, next.create, true).catch(() => undefined);
+            }, 500);
           },
         );
         if (sessionRef.current !== session) {
@@ -286,11 +326,11 @@ export function useRoom(playerId: string) {
 
         clientRef.current = client;
         const room = topics(nextCode);
-        const presence = JSON.stringify({ name });
+        const presence = JSON.stringify({ name: nameRef.current || name });
 
         if (create) {
           client.publish(room.meta, JSON.stringify({ createdAt: Date.now(), host: name }), true);
-        } else {
+        } else if (!resume) {
           const found =
             metaSeenRef.current ||
             (await new Promise<boolean>((resolve) => {
@@ -300,6 +340,7 @@ export function useRoom(playerId: string) {
           metaWaitRef.current = null;
           if (!found) {
             if (sessionRef.current !== session) return;
+            intendedRef.current = null;
             sessionRef.current += 1;
             client.disconnect();
             resetLocal();
@@ -318,6 +359,16 @@ export function useRoom(playerId: string) {
         setStatus('joined');
       } catch (err) {
         if (sessionRef.current !== session) return;
+        if (resume && intendedRef.current) {
+          setStatus('reconnecting');
+          clearReconnect();
+          reconnectTimerRef.current = setTimeout(() => {
+            const next = intendedRef.current;
+            if (!next) return;
+            enter(next.code, next.name, next.create, true).catch(() => undefined);
+          }, 1500);
+          return;
+        }
         resetLocal();
         setStatus('error');
         setError(err instanceof Error ? err.message : 'Não deu para abrir a sala');
@@ -335,6 +386,12 @@ export function useRoom(playerId: string) {
     (nextCode: string, name: string) => enter(nextCode, name, false),
     [enter],
   );
+
+  const reconnect = useCallback(() => {
+    const next = intendedRef.current;
+    if (!next || clientRef.current) return;
+    enter(next.code, next.name, next.create, true).catch(() => undefined);
+  }, [enter]);
 
   const publishRoll = useCallback(
     (result: RollResult) => {
@@ -377,9 +434,20 @@ export function useRoom(playerId: string) {
     [playerId],
   );
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const next = intendedRef.current;
+      if (!next || clientRef.current) return;
+      enter(next.code, next.name, next.create, true).catch(() => undefined);
+    });
+    return () => sub.remove();
+  }, [enter]);
+
   useEffect(() => () => {
     sessionRef.current += 1;
     clearHeartbeat();
+    clearReconnect();
     clientRef.current?.disconnect();
   }, []);
 
@@ -392,6 +460,7 @@ export function useRoom(playerId: string) {
     create,
     join,
     leave,
+    reconnect,
     publishRoll,
     updateName,
   };

@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
-  "build": 1,
+  "version": "1.0.1",
+  "build": 2,
   "apkUrl": "/apk/d20x.apk",
-  "notes": "Primeira versão do D20X.",
+  "notes": "A sala não cai mais ao compartilhar o código. Toque copia, segure ou toque duas vezes para enviar.",
   "force": false
 }

@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { Platform, Share } from 'react-native';
 import { normalizeRoomCode } from './room';
 
@@ -14,38 +15,51 @@ export function writeRoomCodeToUrl(code: string | null) {
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
-export function roomInviteText(code: string): string {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const url = new URL(window.location.href);
-    url.searchParams.set('sala', code);
-    return `Entra na sala ${code} do D20X: ${url.toString()}`;
-  }
-  return `Entra na sala ${code} do D20X para a gente rolar junto.`;
+function roomLink(code: string): string | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  const url = new URL(window.location.href);
+  url.searchParams.set('sala', code);
+  return url.toString();
 }
 
-export async function shareRoomCode(code: string): Promise<'shared' | 'copied' | 'none'> {
+export function roomInviteText(code: string): string {
+  const link = roomLink(code);
+  const boxed = [
+    'D20X · sala da mesa',
+    '',
+    '┌──────────────┐',
+    `│    ${code}    │`,
+    '└──────────────┘',
+    '',
+    'Copia o código e cola na aba Sala do app.',
+  ];
+  if (link) boxed.push('', link);
+  return boxed.join('\n');
+}
+
+export async function copyRoomCode(code: string): Promise<boolean> {
+  try {
+    await Clipboard.setStringAsync(code);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function shareRoomCode(code: string): Promise<'shared' | 'none'> {
   const message = roomInviteText(code);
 
-  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
     try {
-      if (navigator.share) {
-        await navigator.share({ title: `Sala ${code}`, text: message });
-        return 'shared';
-      }
+      await navigator.share({ title: `D20X · sala ${code}`, text: message });
+      return 'shared';
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return 'none';
-    }
-
-    try {
-      await navigator.clipboard.writeText(message);
-      return 'copied';
-    } catch {
-      return 'none';
     }
   }
 
   try {
-    await Share.share({ message });
+    await Share.share({ message, title: `D20X · sala ${code}` });
     return 'shared';
   } catch {
     return 'none';
