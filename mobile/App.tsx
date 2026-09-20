@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Platform,
   Pressable,
@@ -21,13 +21,17 @@ import { DiceBreakdown } from './src/components/DiceBreakdown';
 import { HistoryPanel } from './src/components/HistoryPanel';
 import { Keypad } from './src/components/Keypad';
 import { RollAnimation } from './src/components/RollAnimation';
+import { RoomHeaderChip } from './src/components/RoomHeaderChip';
 import { RoomPanel } from './src/components/RoomPanel';
+import { RoomRollToast } from './src/components/RoomRollToast';
 import { SettingsPanel } from './src/components/SettingsPanel';
 import { UpdateModal } from './src/components/UpdateModal';
 import { appendDiceToExpression, parseAndRollExpression } from './src/dice';
+import { emptyCustomSlots, type CustomDieSlot } from './src/customDice';
 import { capHistory, newHistoryItem } from './src/history';
-import { formatTotal, totalFontSize } from './src/format';
-import { createPlayerId, isRoomOpen, normalizeRoomCode, useRoom } from './src/room';
+import { formatTotal, groupsFromDice, totalFontSize } from './src/format';
+import { createPlayerId, isRoomOpen, normalizeRoomCode, useRoom, type RoomRoll } from './src/room';
+import { notifyRoomRoll, prepareRoomNotifications, watchRoomNotificationTaps } from './src/roomNotify';
 import { roomCodeFromUrl, writeRoomCodeToUrl } from './src/share';
 import {
   MULTI_SOUNDS,
@@ -49,7 +53,7 @@ import {
   type ThemeColors,
   type ThemeId,
 } from './src/theme';
-import type { HistoryItem, RollResult, SessionStats } from './src/types';
+import type { HistoryItem, RollResult, SessionStats, DiceSort } from './src/types';
 import { checkForUpdate, installedVersion, openApk, type UpdateFeed } from './src/update';
 
 type Tab = 'roller' | 'history' | 'room';
@@ -89,6 +93,8 @@ function DiceApp({
   const [updateHint, setUpdateHint] = useState('');
   const [updateBusy, setUpdateBusy] = useState(false);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState('');
+  const [customSlots, setCustomSlots] = useState<Array<CustomDieSlot | null>>(emptyCustomSlots);
+  const [diceSort, setDiceSort] = useState<DiceSort>('rolled');
   const appVersion = installedVersion();
   const singlePlastic = useAudioPlayer(SINGLE_SOUNDS.plastic);
   const singleWood = useAudioPlayer(SINGLE_SOUNDS.wood);
@@ -101,10 +107,14 @@ function DiceApp({
   const [lastError, setLastError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [playerAvatar, setPlayerAvatar] = useState('');
   const [playerId, setPlayerId] = useState(createPlayerId);
   const [joinCode, setJoinCode] = useState(roomCodeFromUrl);
   const room = useRoom(playerId);
   const layout = useLayoutScale();
+  const [roomToast, setRoomToast] = useState<RoomRoll | null>(null);
+  const seenRoomRolls = useRef(new Set<string>());
+  const roomToastsLive = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -115,7 +125,41 @@ function DiceApp({
 
   useEffect(() => {
     if (isRoomOpen(room.status) && room.code) writeRoomCodeToUrl(room.code);
+    if (isRoomOpen(room.status)) {
+      prepareRoomNotifications().catch(() => undefined);
+    }
   }, [room.status, room.code]);
+
+  useEffect(() => {
+    return watchRoomNotificationTaps(() => {
+      setSettingsOpen(false);
+      setTab('room');
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isRoomOpen(room.status) || !room.code) {
+      seenRoomRolls.current.clear();
+      roomToastsLive.current = false;
+      setRoomToast(null);
+      return;
+    }
+    const warm = setTimeout(() => {
+      roomToastsLive.current = true;
+    }, 900);
+    return () => clearTimeout(warm);
+  }, [room.status, room.code]);
+
+  useEffect(() => {
+    const fresh = room.rolls.filter((item) => !seenRoomRolls.current.has(item.id));
+    for (const item of fresh) seenRoomRolls.current.add(item.id);
+    if (!roomToastsLive.current) return;
+    const incoming = fresh.find((item) => item.playerId !== playerId);
+    if (incoming) {
+      setRoomToast(incoming);
+      notifyRoomRoll(incoming).catch(() => undefined);
+    }
+  }, [room.rolls, playerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,8 +183,11 @@ function DiceApp({
       setLastTimestamp(session.lastTimestamp);
       setLastError(session.lastError);
       setPlayerName(session.playerName);
+      setPlayerAvatar(session.playerAvatar ?? '');
       setPlayerId(session.playerId || createPlayerId());
       setDismissedUpdateVersion(session.dismissedUpdateVersion ?? '');
+      setCustomSlots(session.customSlots ?? emptyCustomSlots());
+      setDiceSort(session.diceSort ?? 'rolled');
       requestAnimationFrame(() => {
         SplashScreen.hideAsync().catch(() => undefined);
         setTimeout(() => {
@@ -171,8 +218,11 @@ function DiceApp({
       playerName,
       playerId,
       dismissedUpdateVersion,
+      customSlots,
+      diceSort,
+      playerAvatar,
     }).catch(() => undefined);
-  }, [ready, expression, history, stats, soundEnabled, hapticEnabled, rollAnimationEnabled, singleSoundId, multiSoundId, themeId, lastResult, lastTimestamp, lastError, playerName, playerId, dismissedUpdateVersion]);
+  }, [ready, expression, history, stats, soundEnabled, hapticEnabled, rollAnimationEnabled, singleSoundId, multiSoundId, themeId, lastResult, lastTimestamp, lastError, playerName, playerId, dismissedUpdateVersion, customSlots, diceSort, playerAvatar]);
 
   const hasClearableHistory = history.some((item) => !item.favorite);
 
@@ -198,6 +248,11 @@ function DiceApp({
     }
     setUpdateHint(result.message);
   };
+
+  useEffect(() => {
+    if (!ready) return;
+    room.updateProfile(playerName, playerAvatar);
+  }, [ready, playerName, playerAvatar, room.updateProfile]);
 
   useEffect(() => {
     if (!ready) return;
@@ -288,6 +343,13 @@ function DiceApp({
     roll(expr);
   };
 
+  const resultGroups = lastResult ? groupsFromDice(lastResult.dice, lastResult.groups) : [];
+  const manyDice = resultGroups.length > 1 || (resultGroups[0]?.rolls.length ?? 0) > 5;
+  const diceAreaMax = Math.min(
+    Math.max(resultGroups.length, 1) * 44 + 10,
+    Math.round(layout.height * (layout.tiny ? 0.28 : 0.36)),
+  );
+
   if (!ready) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
@@ -303,23 +365,36 @@ function DiceApp({
       {!settingsOpen ? (
         <View style={styles.header}>
           <View style={styles.brand}>
-            <BrandMark size={32} />
+            <BrandMark size={layout.tiny ? 28 : 32} />
             <View style={styles.brandText}>
               <Text style={[styles.title, { fontSize: layout.titleSize }]} numberOfLines={1}>
                 D20X
               </Text>
-              {!layout.compact ? (
+              {!layout.showSubtitle ? null : (
                 <Text style={styles.subtitle}>Rolador D&D / RPG de mesa</Text>
-              ) : null}
+              )}
             </View>
           </View>
-          <Pressable
-            accessibilityLabel="Abrir ajustes"
-            style={styles.iconBtn}
-            onPress={() => setSettingsOpen(true)}
-          >
-            <Ionicons name="settings-outline" size={20} color={colors.muted} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            {isRoomOpen(room.status) && room.code ? (
+              <RoomHeaderChip
+                code={room.code}
+                roomTitle={room.roomTitle}
+                hostName={room.hostName}
+                players={room.players}
+                selfId={playerId}
+                status={room.status}
+                onOpenRoom={() => setTab('room')}
+              />
+            ) : null}
+            <Pressable
+              accessibilityLabel="Abrir ajustes"
+              style={styles.iconBtn}
+              onPress={() => setSettingsOpen(true)}
+            >
+              <Ionicons name="settings-outline" size={20} color={colors.muted} />
+            </Pressable>
+          </View>
         </View>
       ) : null}
 
@@ -327,10 +402,10 @@ function DiceApp({
       {settingsOpen ? (
         <SettingsPanel
           playerName={playerName}
-          onChangeName={(name) => {
-            setPlayerName(name);
-            room.updateName(name);
-          }}
+          playerAvatar={playerAvatar}
+          playerId={playerId}
+          onSaveName={setPlayerName}
+          onChangeAvatar={setPlayerAvatar}
           themeId={themeId}
           onChangeTheme={setThemeId}
           soundEnabled={soundEnabled}
@@ -353,6 +428,10 @@ function DiceApp({
           onCheckUpdate={() => {
             runUpdateCheck(true).catch(() => undefined);
           }}
+          customSlots={customSlots}
+          onChangeCustomSlots={setCustomSlots}
+          diceSort={diceSort}
+          onChangeDiceSort={setDiceSort}
         />
       ) : tab === 'history' ? (
         <HistoryPanel
@@ -364,46 +443,50 @@ function DiceApp({
           onClearKeepFavorites={() => {
             if (hasClearableHistory) setConfirmClear(true);
           }}
+          diceSort={diceSort}
         />
       ) : tab === 'room' ? (
         <RoomPanel
           playerName={playerName}
-          onChangeName={(name) => {
-            setPlayerName(name);
-            room.updateName(name);
-          }}
+          playerAvatar={playerAvatar}
+          playerId={playerId}
           joinCode={joinCode}
           onChangeJoinCode={(value) => setJoinCode(normalizeRoomCode(value))}
           status={room.status}
           code={room.code}
+          roomTitle={room.roomTitle}
           players={room.players}
           rolls={room.rolls}
           error={room.error}
           selfId={playerId}
-          onCreate={() => room.create(playerName)}
+          onCreate={(title) => room.create(playerName, title)}
           onJoin={() => room.join(joinCode, playerName)}
           onLeave={room.leave}
           onReconnect={room.reconnect}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       ) : (
-      <ScrollView
-        contentContainerStyle={[styles.content, { padding: layout.screenPad }]}
-        keyboardShouldPersistTaps="handled"
+      <View
+        style={[
+          styles.home,
+          { padding: layout.screenPad, gap: layout.contentGap },
+        ]}
       >
-        {isRoomOpen(room.status) && room.code ? (
-          <Pressable style={styles.roomBanner} onPress={() => setTab('room')}>
-            <Text style={styles.roomBannerText} numberOfLines={1}>
-              Sala {room.code} · {room.players.length} jogador{room.players.length === 1 ? '' : 'es'}
-            </Text>
-            <Text style={styles.roomBannerHint}>rolagens vão para a mesa</Text>
-          </Pressable>
-        ) : null}
-        <View style={styles.display}>
+        <View style={[styles.display, { padding: layout.displayPad, paddingBottom: layout.displayPad + 8 }]}>
           <View style={styles.displayTop}>
-            <View style={styles.legend}>
-              <Text style={styles.legendRed}>1 falha</Text>
-              <Text style={styles.legendGreen}>Máx crítico</Text>
-              <Text style={styles.legendNeutral}>Outros</Text>
+            <View style={styles.inlineStats}>
+              <View style={styles.inlineStat}>
+                <Text style={styles.inlineStatValue}>{formatTotal(stats.totalRolls)}</Text>
+                <Text style={styles.inlineStatLabel} numberOfLines={1}>rolagens</Text>
+              </View>
+              <View style={styles.inlineStat}>
+                <Text style={[styles.inlineStatValue, styles.statGreen]}>{formatTotal(stats.maxCrits)}</Text>
+                <Text style={[styles.inlineStatLabel, styles.statGreen]} numberOfLines={1}>críticos</Text>
+              </View>
+              <View style={styles.inlineStat}>
+                <Text style={[styles.inlineStatValue, styles.statRed]}>{formatTotal(stats.minCrits)}</Text>
+                <Text style={[styles.inlineStatLabel, styles.statRed]} numberOfLines={1}>falhas</Text>
+              </View>
             </View>
             <View style={styles.displayActions}>
               <Pressable
@@ -444,6 +527,7 @@ function DiceApp({
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="done"
+              underlineColorAndroid="transparent"
               onSubmitEditing={() => roll()}
               style={[styles.input, { fontSize: Math.min(layout.inputSize, expression.length > 16 ? 16 : layout.inputSize) }]}
             />
@@ -462,33 +546,41 @@ function DiceApp({
             </View>
             {lastError ? (
               <Text style={styles.error}>{lastError}</Text>
-            ) : lastResult ? (
+            ) : (
               <View style={styles.resultBody}>
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Total</Text>
-                  <Text
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.45}
-                    style={[styles.totalValue, { fontSize: totalFontSize(lastResult.total, layout.totalSize) }]}
-                  >
-                    {formatTotal(lastResult.total)}
-                  </Text>
-                </View>
-                {lastResult.dice.length > 0 ? (
-                  <ScrollView
-                    style={styles.diceScroller}
-                    contentContainerStyle={styles.diceWrap}
-                    nestedScrollEnabled
-                  >
-                    <DiceBreakdown dice={lastResult.dice} groups={lastResult.groups} compact />
-                  </ScrollView>
+                {lastResult ? (
+                  <View style={styles.resultRow}>
+                    <View style={styles.totalPane}>
+                      <Text
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.45}
+                        style={[styles.totalValue, { fontSize: totalFontSize(lastResult.total, layout.totalSize) }]}
+                      >
+                        {formatTotal(lastResult.total)}
+                      </Text>
+                    </View>
+                    <View style={[styles.rightPane, manyDice && styles.rightPaneFill]}>
+                      {lastResult.dice.length > 0 ? (
+                        manyDice ? (
+                          <ScrollView
+                            style={[styles.diceScroller, { maxHeight: diceAreaMax }]}
+                            contentContainerStyle={[styles.diceWrap, manyDice && styles.diceWrapFill]}
+                            nestedScrollEnabled
+                            showsVerticalScrollIndicator={false}
+                          >
+                            <DiceBreakdown dice={lastResult.dice} groups={lastResult.groups} compact sort={diceSort} />
+                          </ScrollView>
+                        ) : (
+                          <DiceBreakdown dice={lastResult.dice} groups={lastResult.groups} compact sort={diceSort} />
+                        )
+                      ) : null}
+                    </View>
+                  </View>
                 ) : (
-                  <Text style={styles.hint}>Constante matemática (sem dados)</Text>
+                  <Text style={styles.hint}>Digite uma expressão e pressione Rolar</Text>
                 )}
               </View>
-            ) : (
-              <Text style={styles.hint}>Digite uma expressão e pressione Rolar</Text>
             )}
           </View>
         </View>
@@ -499,30 +591,10 @@ function DiceApp({
           onInsertMacro={setExpression}
           onClear={clearVisor}
           onRoll={() => roll()}
+          customSlots={customSlots}
         />
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statLabel}>Rolagens</Text>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {formatTotal(stats.totalRolls)}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statLabel, styles.statGreen]}>Críticos</Text>
-            <Text style={[styles.statValue, styles.statGreen]} numberOfLines={1} adjustsFontSizeToFit>
-              {formatTotal(stats.maxCrits)}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statLabel, styles.statRed]}>Falhas (1)</Text>
-            <Text style={[styles.statValue, styles.statRed]} numberOfLines={1} adjustsFontSizeToFit>
-              {formatTotal(stats.minCrits)}
-            </Text>
-          </View>
-        </View>
-
-      </ScrollView>
+      </View>
       )}
       </View>
 
@@ -561,6 +633,14 @@ function DiceApp({
       </View>}
 
       <RollAnimation result={rollFx} visible={Boolean(rollFx)} onDone={() => setRollFx(null)} />
+
+      {tab !== 'room' ? (
+        <RoomRollToast
+          roll={roomToast}
+          avatar={room.players.find((player) => player.id === roomToast?.playerId)?.avatar}
+          onClose={() => setRoomToast(null)}
+        />
+      ) : null}
 
       <UpdateModal
         visible={updateVisible}
@@ -688,6 +768,13 @@ function createAppStyles(colors: ThemeColors) {
     color: colors.faint,
     fontSize: 11,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   displayTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -695,7 +782,9 @@ function createAppStyles(colors: ThemeColors) {
     gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#0f172a',
-    paddingBottom: 8,
+    paddingBottom: 6,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   displayActions: {
     flexDirection: 'row',
@@ -718,40 +807,44 @@ function createAppStyles(colors: ThemeColors) {
     gap: 10,
     paddingBottom: 24,
   },
+  home: {
+    flex: 1,
+    minHeight: 0,
+  },
   display: {
+    flexGrow: 0,
+    flexShrink: 1,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.xl,
     padding: 12,
-    gap: 8,
+    gap: 6,
     overflow: 'hidden',
+    minHeight: 0,
   },
-  legend: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  legendRed: { color: colors.red, fontSize: 10, fontWeight: '600' },
-  legendGreen: { color: colors.emerald, fontSize: 10, fontWeight: '600' },
-  legendNeutral: { color: colors.muted, fontSize: 10, fontWeight: '600' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   input: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
+    height: 36,
     color: colors.indigo,
     fontSize: 24,
     fontWeight: '700',
-    paddingVertical: 4,
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   backspace: {
-    padding: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
   },
   backspaceText: {
     color: colors.muted,
@@ -761,55 +854,112 @@ function createAppStyles(colors: ThemeColors) {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 8,
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
+    gap: 8,
   },
   resultHead: {
     flexDirection: 'row',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    gap: 8,
+    flexShrink: 0,
   },
   resultLabel: {
     color: colors.faint,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   timestamp: {
-    color: '#475569',
+    color: colors.faint,
     fontSize: 11,
     fontVariant: ['tabular-nums'],
+    letterSpacing: 0.2,
   },
   resultBody: {
+    gap: 8,
+    flexShrink: 1,
+    minHeight: 0,
+  },
+  resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    minWidth: 0,
+    flexShrink: 1,
+    minHeight: 0,
   },
-  totalRow: {
-    gap: 2,
-    minWidth: 56,
-    flexShrink: 0,
-  },
-  totalLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+  totalPane: {
+    minWidth: 72,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   totalValue: {
     color: colors.white,
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+    lineHeight: 34,
+    textAlign: 'center',
+  },
+  rightPane: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  rightPaneFill: {
+    alignItems: 'stretch',
   },
   diceScroller: {
-    flex: 1,
-    maxHeight: 72,
-    minWidth: 0,
+    width: '100%',
+    flexGrow: 0,
   },
   diceWrap: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  diceWrapFill: {
+    alignItems: 'stretch',
+    width: '100%',
+  },
+  inlineStats: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 8,
     flexGrow: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: 2,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  inlineStat: {
+    alignItems: 'center',
+    width: 54,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  inlineStatValue: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    width: '100%',
+    includeFontPadding: false,
+  },
+  inlineStatLabel: {
+    color: colors.faint,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    width: '100%',
+    letterSpacing: 0.3,
+    includeFontPadding: false,
+    lineHeight: 12,
   },
   moreDice: {
     color: colors.faint,
@@ -821,6 +971,8 @@ function createAppStyles(colors: ThemeColors) {
   hint: {
     color: colors.faint,
     fontStyle: 'italic',
+    flex: 1,
+    alignSelf: 'center',
   },
   error: {
     color: colors.red,
@@ -834,6 +986,7 @@ function createAppStyles(colors: ThemeColors) {
   statsRow: {
     flexDirection: 'row',
     gap: 6,
+    flexShrink: 0,
   },
   stat: {
     flex: 1,

@@ -1,6 +1,15 @@
-import type { DiceGroup, DieRoll } from './types';
+import type { DiceGroup, DiceSort, DieRoll } from './types';
 
 export const VISIBLE_DICE_LIMIT = 36;
+
+export function isDiceSort(value: unknown): value is DiceSort {
+  return value === 'rolled' || value === 'asc';
+}
+
+export function sortGroupRolls(rolls: DieRoll[], sort: DiceSort = 'rolled'): DieRoll[] {
+  if (sort !== 'asc') return rolls;
+  return [...rolls].sort((a, b) => a.value - b.value);
+}
 
 export function groupsFromDice(dice: DieRoll[], groups?: DiceGroup[]): DiceGroup[] {
   if (groups && groups.length > 0) return groups;
@@ -24,14 +33,14 @@ export function groupsFromDice(dice: DieRoll[], groups?: DiceGroup[]): DiceGroup
   return derived;
 }
 
-export function formatBreakdownLine(dice: DieRoll[], groups?: DiceGroup[]): string {
+export function formatBreakdownLine(dice: DieRoll[], groups?: DiceGroup[], sort: DiceSort = 'rolled'): string {
   return groupsFromDice(dice, groups)
-    .map((group) => `${group.notation} ${formatGroupValues(group)}`)
+    .map((group) => `${group.notation} ${formatGroupValues(group, sort)}`)
     .join('  ·  ');
 }
 
-export function formatGroupValues(group: DiceGroup): string {
-  return group.rolls
+export function formatGroupValues(group: DiceGroup, sort: DiceSort = 'rolled'): string {
+  return sortGroupRolls(group.rolls, sort)
     .map((die) => (die.isKept ? String(die.value) : `${die.value}↓`))
     .join(' + ');
 }

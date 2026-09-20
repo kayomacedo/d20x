@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { formatBreakdownLine, formatRollWhen, formatTotal } from '../format';
 import { radius, useThemedStyles, type ThemeColors } from '../theme';
-import type { HistoryItem } from '../types';
+import type { DiceSort, HistoryItem } from '../types';
 type Props = {
   items: HistoryItem[];
   onReroll: (expression: string) => void;
@@ -11,6 +11,7 @@ type Props = {
   onDelete: (id: string) => void;
   onDeleteMany: (ids: string[]) => void;
   onClearKeepFavorites: () => void;
+  diceSort?: DiceSort;
 };
 
 function Checkbox({ checked, disabled }: { checked: boolean; disabled?: boolean }) {
@@ -37,6 +38,7 @@ function HistoryRow({
   onDelete,
   onLongPress,
   onToggleSelect,
+  diceSort = 'rolled',
 }: {
   item: HistoryItem;
   selecting: boolean;
@@ -46,6 +48,7 @@ function HistoryRow({
   onDelete: (id: string) => void;
   onLongPress: () => void;
   onToggleSelect: () => void;
+  diceSort?: DiceSort;
 }) {
   const styles = useThemedStyles(createStyles);
   const card = (
@@ -84,7 +87,7 @@ function HistoryRow({
         </Text>
         {item.result.dice.length > 0 ? (
           <Text style={styles.breakdown} numberOfLines={2}>
-            {formatBreakdownLine(item.result.dice, item.result.groups)}
+            {formatBreakdownLine(item.result.dice, item.result.groups, diceSort)}
           </Text>
         ) : null}
       </View>
@@ -133,6 +136,7 @@ export function HistoryPanel({
   onDelete,
   onDeleteMany,
   onClearKeepFavorites,
+  diceSort = 'rolled',
 }: Props) {
   const styles = useThemedStyles(createStyles);
   const [selecting, setSelecting] = useState(false);
@@ -249,6 +253,7 @@ export function HistoryPanel({
                   onDelete={onDelete}
                   onLongPress={() => enterSelect()}
                   onToggleSelect={() => undefined}
+                  diceSort={diceSort}
                 />
               ))
             )}
@@ -272,6 +277,7 @@ export function HistoryPanel({
                   onDelete={onDelete}
                   onLongPress={() => enterSelect(item.id)}
                   onToggleSelect={() => toggleSelect(item.id, item.favorite)}
+                  diceSort={diceSort}
                 />
               ))
             )}

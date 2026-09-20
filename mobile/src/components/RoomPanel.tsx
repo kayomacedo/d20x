@@ -4,28 +4,33 @@ import { formatBreakdownLine, formatRollWhen, formatTotal } from '../format';
 import { copyRoomCode, shareRoomCode } from '../share';
 import { radius, useThemedStyles, type ThemeColors } from '../theme';
 import { isRoomOpen, type RoomPlayer, type RoomRoll, type RoomStatus } from '../room';
+import { PlayerAvatar } from './PlayerAvatar';
 
 type Props = {
   playerName: string;
-  onChangeName: (name: string) => void;
+  playerAvatar: string;
+  playerId: string;
   joinCode: string;
   onChangeJoinCode: (code: string) => void;
   status: RoomStatus;
   code: string | null;
+  roomTitle: string;
   players: RoomPlayer[];
   rolls: RoomRoll[];
   error: string | null;
   selfId: string;
-  onCreate: () => void;
+  onCreate: (roomTitle: string) => void;
   onJoin: () => void;
   onLeave: () => void;
   onReconnect: () => void;
+  onOpenSettings: () => void;
 };
 
 function PlayerChip({ player, self }: { player: RoomPlayer; self: boolean }) {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.chip, self && styles.chipSelf]}>
+      <PlayerAvatar name={player.name} id={player.id} avatar={player.avatar} size={22} self={self} />
       <Text style={[styles.chipText, self && styles.chipTextSelf]} numberOfLines={1}>
         {self ? `Você · ${player.name}` : player.name}
       </Text>
@@ -35,11 +40,13 @@ function PlayerChip({ player, self }: { player: RoomPlayer; self: boolean }) {
 
 export function RoomPanel({
   playerName,
-  onChangeName,
+  playerAvatar,
+  playerId,
   joinCode,
   onChangeJoinCode,
   status,
   code,
+  roomTitle,
   players,
   rolls,
   error,
@@ -48,11 +55,13 @@ export function RoomPanel({
   onJoin,
   onLeave,
   onReconnect,
+  onOpenSettings,
 }: Props) {
   const styles = useThemedStyles(createStyles);
   const joined = isRoomOpen(status) && code;
   const busy = status === 'connecting';
   const [copied, setCopied] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
   const lastTapRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -69,7 +78,7 @@ export function RoomPanel({
     if (!code) return;
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     lastTapRef.current = 0;
-    shareRoomCode(code).finally(() => onReconnect());
+    shareRoomCode(code, roomTitle).finally(() => onReconnect());
   };
 
   const onCodePress = () => {
@@ -91,11 +100,13 @@ export function RoomPanel({
       <View style={styles.screen}>
         <View style={styles.toolbar}>
           <View style={styles.toolbarText}>
-            <Text style={styles.title}>Sala {code}</Text>
+            <Text style={styles.title} numberOfLines={1}>
+              {roomTitle || `Sala ${code}`}
+            </Text>
             <Text style={styles.subtitle}>
               {status === 'reconnecting'
                 ? 'Reconectando à mesa...'
-                : `${players.length} jogador${players.length === 1 ? '' : 'es'} · role no Rolador`}
+                : `Código ${code} · ${players.length} jogador${players.length === 1 ? '' : 'es'}`}
             </Text>
           </View>
           <Pressable style={styles.leaveBtn} onPress={onLeave}>
@@ -110,7 +121,7 @@ export function RoomPanel({
             onLongPress={openShare}
             delayLongPress={350}
           >
-            <Text style={styles.codeLabel}>Código da sala</Text>
+            <Text style={styles.codeLabel}>{roomTitle ? roomTitle : 'Código da sala'}</Text>
             <View style={styles.codeBox}>
               <Text style={styles.codeValue}>{code}</Text>
             </View>
@@ -132,9 +143,17 @@ export function RoomPanel({
           ) : (
             rolls.map((item) => {
               const mine = item.playerId === selfId;
+              const who = players.find((player) => player.id === item.playerId);
               return (
                 <View key={item.id} style={[styles.rollCard, mine && styles.rollCardMine]}>
                   <View style={styles.rollTop}>
+                    <PlayerAvatar
+                      name={item.playerName}
+                      id={item.playerId}
+                      avatar={who?.avatar}
+                      size={32}
+                      self={mine}
+                    />
                     <View style={styles.rollMain}>
                       <Text style={styles.rollName} numberOfLines={1}>
                         {mine ? `Você · ${item.playerName}` : item.playerName}
@@ -170,25 +189,25 @@ export function RoomPanel({
       <View style={styles.toolbar}>
         <View style={styles.toolbarText}>
           <Text style={styles.title}>Sala</Text>
-          <Text style={styles.subtitle}>Crie um código e chama a mesa</Text>
+          <Text style={styles.subtitle}>Dê um nome à mesa ou entre com o código</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.fieldLabel}>Seu nome na mesa</Text>
+        <Text style={styles.fieldLabel}>Nome da sala</Text>
         <TextInput
-          value={playerName}
-          onChangeText={onChangeName}
-          placeholder="Ex: Luan"
+          value={draftTitle}
+          onChangeText={setDraftTitle}
+          placeholder="Ex: Mesa do sábado"
           placeholderTextColor="#475569"
-          maxLength={18}
-          autoCapitalize="words"
+          maxLength={28}
+          autoCapitalize="sentences"
           style={styles.input}
         />
 
         <Pressable
           style={[styles.primaryBtn, busy && styles.btnDisabled]}
-          onPress={onCreate}
+          onPress={() => onCreate(draftTitle)}
           disabled={busy}
         >
           <Text style={styles.primaryBtnText}>{busy ? 'Abrindo sala...' : 'Criar sala'}</Text>
@@ -220,11 +239,20 @@ export function RoomPanel({
           <Text style={styles.secondaryBtnText}>{busy ? 'Entrando...' : 'Entrar na sala'}</Text>
         </Pressable>
 
+        <Pressable style={styles.youCard} onPress={onOpenSettings}>
+          <PlayerAvatar name={playerName || 'Você'} id={playerId} avatar={playerAvatar} size={36} self />
+          <View style={styles.youText}>
+            <Text style={styles.youLabel}>Você entra como</Text>
+            <Text style={styles.youName} numberOfLines={1}>
+              {playerName.trim() || 'Sem nome · toque para definir em Ajustes'}
+            </Text>
+          </View>
+        </Pressable>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Text style={styles.help}>
-          Quem tiver o app entra com o mesmo código. As rolagens de todo mundo aparecem aqui, com
-          o nome de cada um.
+          O nome da sala é o da mesa. Seu nome e foto ficam em Ajustes e aparecem para o resto da mesa.
         </Text>
       </ScrollView>
     </View>
@@ -350,6 +378,34 @@ function createStyles(colors: ThemeColors) {
     lineHeight: 18,
     marginTop: 4,
   },
+  youCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  youText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  youLabel: {
+    color: colors.faint,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  youName: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 1,
+  },
   codeCard: {
     backgroundColor: colors.card,
     borderColor: colors.border,
@@ -399,12 +455,16 @@ function createStyles(colors: ThemeColors) {
     gap: 6,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: colors.keypad,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingLeft: 4,
+    paddingRight: 10,
+    paddingVertical: 4,
     maxWidth: '100%',
   },
   chipSelf: {
@@ -436,6 +496,7 @@ function createStyles(colors: ThemeColors) {
   },
   rollTop: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 10,
   },
   rollMain: {

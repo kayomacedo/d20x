@@ -2,7 +2,7 @@
   "expo": {
     "name": "D20X",
     "slug": "d20x",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.d20x.roller",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#0f172a",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -26,6 +26,7 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
@@ -53,7 +54,18 @@
         }
       ],
       [
-        "expo-splash-screen",
+        "expo-notifications",
+        {
+          "color": "#6366f1",
+          "defaultChannel": "d20x-sala"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O D20X usa uma foto sua para o perfil na sala."
+        }
+      ],
         {
           "backgroundColor": "#0f172a",
           "image": "./assets/splash-icon.png",

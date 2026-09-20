@@ -1,3 +1,4 @@
+import type { CustomDieSlot } from './customDice';
 import type { MultiSoundId, SingleSoundId } from './sound';
 import type { ThemeId } from './theme';
 
@@ -33,6 +34,8 @@ export type HistoryItem = {
   favorite: boolean;
 };
 
+export type DiceSort = 'rolled' | 'asc';
+
 export type SessionStats = {
   totalRolls: number;
   maxCrits: number;
@@ -55,4 +58,7 @@ export type PersistedSession = {
   playerName: string;
   playerId: string;
   dismissedUpdateVersion: string;
+  customSlots: Array<CustomDieSlot | null>;
+  diceSort: DiceSort;
+  playerAvatar: string;
 };

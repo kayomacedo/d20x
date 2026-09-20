@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
+import { CUSTOM_SLOT_COUNT, type CustomDieSlot } from '../customDice';
 import { radius, useLayoutScale, useThemedStyles, type ThemeColors } from '../theme';
 
 type Props = {
@@ -7,6 +8,7 @@ type Props = {
   onInsertMacro: (macro: string) => void;
   onClear: () => void;
   onRoll: () => void;
+  customSlots?: Array<CustomDieSlot | null>;
 };
 
 type KeyDef = {
@@ -51,28 +53,55 @@ const ROWS: KeyDef[][] = [
   ],
 ];
 
-export function Keypad({ onAppendChar, onAppendDice, onInsertMacro, onClear, onRoll }: Props) {
-  const { compact, keyPadV } = useLayoutScale();
+export function Keypad({ onAppendChar, onAppendDice, onInsertMacro, onClear, onRoll, customSlots = [] }: Props) {
+  const { compact, tiny, keyPadV, keyMinH, diePadV, dieFont } = useLayoutScale();
   const styles = useThemedStyles(createStyles);
+  const slots = Array.from({ length: CUSTOM_SLOT_COUNT }, (_, index) => customSlots[index] ?? null);
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, tiny && styles.wrapTight]}>
+      <View style={styles.diceRow}>
+        {slots.map((slot, index) =>
+          slot ? (
+            <Pressable key={`custom-${index}`} style={[styles.dieBtn, { paddingVertical: diePadV }]} onPress={() => onInsertMacro(slot.expression)}>
+              <Text
+                style={[styles.dieText, { fontSize: dieFont }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
+                {slot.label}
+              </Text>
+            </Pressable>
+          ) : (
+            <View key={`custom-${index}`} style={[styles.dieSlot, { minHeight: diePadV * 2 + 18 }]} />
+          ),
+        )}
+      </View>
+
       <View style={styles.diceRow}>
         {DICE.map((die) => (
-          <Pressable key={die} style={styles.dieBtn} onPress={() => onAppendDice(die)}>
-            <Text style={[styles.dieText, compact && styles.dieTextCompact]}>{die}</Text>
+          <Pressable key={die} style={[styles.dieBtn, { paddingVertical: diePadV }]} onPress={() => onAppendDice(die)}>
+            <Text
+              style={[styles.dieText, { fontSize: dieFont }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
+              {die}
+            </Text>
           </Pressable>
         ))}
       </View>
 
       <View style={styles.macroRow}>
-        <Pressable style={[styles.macro, styles.macroIndigo]} onPress={() => onInsertMacro('2d20kh1')}>
+        <Pressable style={[styles.macro, styles.macroIndigo, tiny && styles.macroTight]} onPress={() => onInsertMacro('2d20kh1')}>
           <Text style={styles.macroIndigoText} numberOfLines={1}>Vantagem</Text>
         </Pressable>
-        <Pressable style={[styles.macro, styles.macroAmber]} onPress={() => onInsertMacro('2d20kl1')}>
+        <Pressable style={[styles.macro, styles.macroAmber, tiny && styles.macroTight]} onPress={() => onInsertMacro('2d20kl1')}>
           <Text style={styles.macroAmberText} numberOfLines={1}>Desvantagem</Text>
         </Pressable>
-        <Pressable style={[styles.macro, styles.macroGreen]} onPress={() => onInsertMacro('4d6d1')}>
+        <Pressable style={[styles.macro, styles.macroGreen, tiny && styles.macroTight]} onPress={() => onInsertMacro('4d6d1')}>
           <Text style={styles.macroGreenText} numberOfLines={1}>Atributo</Text>
         </Pressable>
       </View>
@@ -84,7 +113,7 @@ export function Keypad({ onAppendChar, onAppendDice, onInsertMacro, onClear, onR
               key={key.label}
               style={[
                 styles.key,
-                { flex: key.flex ?? 1, paddingVertical: keyPadV },
+                { flex: key.flex ?? 1, paddingVertical: keyPadV, minHeight: keyMinH },
                 key.tone === 'clear' && styles.keyClear,
                 key.tone === 'op' && styles.keyOp,
                 key.tone === 'die' && styles.keyDie,
@@ -100,11 +129,14 @@ export function Keypad({ onAppendChar, onAppendDice, onInsertMacro, onClear, onR
                 style={[
                   styles.keyText,
                   compact && styles.keyTextCompact,
+                  tiny && styles.keyTextTiny,
                   key.tone === 'clear' && styles.keyClearText,
                   key.tone === 'op' && styles.keyOpText,
                   key.tone === 'die' && styles.keyDieText,
                   key.tone === 'roll' && styles.keyRollText,
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
               >
                 {key.label}
               </Text>
@@ -123,22 +155,43 @@ function createStyles(colors: ThemeColors) {
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.xl,
-    padding: 10,
-    gap: 6,
+    padding: 8,
+    gap: 5,
+    flexShrink: 0,
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  wrapTight: {
+    padding: 6,
+    gap: 4,
   },
   diceRow: {
     flexDirection: 'row',
     gap: 4,
+    minWidth: 0,
   },
   dieBtn: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.keypadAlt,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.md,
     paddingVertical: 7,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  dieSlot: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 28,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: radius.md,
+    backgroundColor: 'transparent',
   },
   dieText: {
     color: colors.indigo,
@@ -152,14 +205,20 @@ function createStyles(colors: ThemeColors) {
   macroRow: {
     flexDirection: 'row',
     gap: 4,
+    minWidth: 0,
   },
   macro: {
     flex: 1,
+    minWidth: 0,
     borderWidth: 1,
     borderRadius: radius.md,
     paddingVertical: 7,
     paddingHorizontal: 4,
     alignItems: 'center',
+  },
+  macroTight: {
+    paddingVertical: 5,
+    paddingHorizontal: 2,
   },
   macroIndigo: {
     backgroundColor: '#1e1b4b66',
@@ -186,6 +245,7 @@ function createStyles(colors: ThemeColors) {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 40,
+    minWidth: 0,
   },
   keyClear: {
     backgroundColor: '#450a0a99',
@@ -208,6 +268,9 @@ function createStyles(colors: ThemeColors) {
   },
   keyTextCompact: {
     fontSize: 16,
+  },
+  keyTextTiny: {
+    fontSize: 14,
   },
   keyClearText: { color: '#fca5a5' },
   keyOpText: { color: colors.indigo },

@@ -263,17 +263,30 @@ export function useThemedStyles(factory: (palette: ThemeColors) => Record<string
 
 export function useLayoutScale() {
   const { width, height } = useWindowDimensions();
-  const compact = width < 390 || height < 740;
+  const narrow = width < 360;
+  const short = height < 720;
+  const compact = width < 390 || height < 760;
+  const tiny = height < 650 || width < 340;
 
   return {
     width,
     height,
     compact,
-    screenPad: compact ? 10 : 12,
-    keyPadV: compact ? 8 : 10,
-    inputSize: compact ? 20 : 22,
-    totalSize: compact ? 28 : 32,
+    narrow,
+    short,
+    tiny,
+    screenPad: tiny ? 8 : compact ? 10 : 12,
+    contentGap: tiny ? 6 : compact ? 8 : 10,
+    keyPadV: tiny ? 5 : short ? 7 : compact ? 8 : 10,
+    keyMinH: tiny ? 30 : short ? 34 : 36,
+    diePadV: tiny ? 4 : compact ? 5 : 7,
+    dieFont: tiny ? 9 : compact ? 10 : 12,
+    inputSize: tiny ? 18 : compact ? 20 : 22,
+    totalSize: tiny ? 24 : compact ? 28 : 32,
     titleSize: compact ? 14 : 16,
+    displayPad: tiny ? 8 : compact ? 10 : 12,
+    statsPad: tiny ? 5 : 8,
+    showSubtitle: !compact,
   };
 }
 

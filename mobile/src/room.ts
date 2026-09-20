@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { connectMqttRoom, type MqttClient } from './mqttLite';
+import { normalizeAvatar } from './profile';
 import type { DiceGroup, DieRoll, RollResult } from './types';
 
 export type RoomPlayer = {
   id: string;
   name: string;
+  avatar: string;
 };
 
 export type RoomRoll = {
@@ -46,6 +48,10 @@ export function normalizeRoomCode(value: string): string {
 
 export function normalizePlayerName(value: string): string {
   return value.trim().replace(/\s+/g, ' ').slice(0, 18);
+}
+
+export function normalizeRoomTitle(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').slice(0, 28);
 }
 
 function topics(code: string) {
@@ -106,6 +112,21 @@ function asRoomRoll(value: unknown): RoomRoll | null {
   };
 }
 
+function presenceJSON(name: string, avatar: string): string {
+  return JSON.stringify(avatar ? { name, avatar } : { name });
+}
+
+function asPresence(payload: string): { name: string; avatar: string } | null {
+  try {
+    const parsed = JSON.parse(payload) as { name?: string; avatar?: string };
+    const name = normalizePlayerName(parsed.name ?? '');
+    if (!name) return null;
+    return { name, avatar: normalizeAvatar(parsed.avatar) };
+  } catch {
+    return null;
+  }
+}
+
 function mergeRolls(current: RoomRoll[], incoming: RoomRoll[]): RoomRoll[] {
   const map = new Map<string, RoomRoll>();
   for (const roll of [...incoming, ...current]) map.set(roll.id, roll);
@@ -148,10 +169,13 @@ export function useRoom(playerId: string) {
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
   const [rolls, setRolls] = useState<RoomRoll[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [hostName, setHostName] = useState('');
+  const [roomTitle, setRoomTitle] = useState('');
   const clientRef = useRef<MqttClient | null>(null);
   const codeRef = useRef<string | null>(null);
   const nameRef = useRef('');
-  const intendedRef = useRef<{ code: string; name: string; create: boolean } | null>(null);
+  const avatarRef = useRef('');
+  const intendedRef = useRef<{ code: string; name: string; create: boolean; title: string } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const metaWaitRef = useRef<((found: boolean) => void) | null>(null);
@@ -177,6 +201,8 @@ export function useRoom(playerId: string) {
     setCode(null);
     setPlayers([]);
     setRolls([]);
+    setHostName('');
+    setRoomTitle('');
   };
 
   const dropClient = () => {
@@ -203,6 +229,15 @@ export function useRoom(playerId: string) {
       if (payload) {
         metaSeenRef.current = true;
         metaWaitRef.current?.(true);
+        try {
+          const parsed = JSON.parse(payload) as { host?: string; title?: string };
+          const host = normalizePlayerName(parsed.host ?? '');
+          const title = normalizeRoomTitle(parsed.title ?? '');
+          if (host) setHostName(host);
+          if (title) setRoomTitle(title);
+        } catch {
+          /* ignore broken meta */
+        }
       }
       return;
     }
@@ -237,12 +272,11 @@ export function useRoom(playerId: string) {
         return;
       }
       try {
-        const parsed = JSON.parse(payload) as { name?: string };
-        const name = normalizePlayerName(parsed.name ?? '');
-        if (!name) return;
+        const parsed = asPresence(payload);
+        if (!parsed) return;
         setPlayers((prev) => {
           const next = prev.filter((player) => player.id !== id);
-          next.push({ id, name });
+          next.push({ id, name: parsed.name, avatar: parsed.avatar });
           return next.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
         });
       } catch {
@@ -268,12 +302,18 @@ export function useRoom(playerId: string) {
   }, [playerId]);
 
   const enter = useCallback(
-    async (rawCode: string, rawName: string, create: boolean, resume = false) => {
+    async (rawCode: string, rawName: string, create: boolean, resume = false, rawTitle = '') => {
       const nextCode = normalizeRoomCode(rawCode);
       const name = normalizePlayerName(rawName);
+      const title = normalizeRoomTitle(rawTitle);
       if (name.length < 2) {
         setStatus('error');
-        setError('Escreva um nome com pelo menos 2 letras');
+        setError('Defina seu nome de exibição em Ajustes');
+        return;
+      }
+      if (create && !resume && title.length < 2) {
+        setStatus('error');
+        setError('Escreva o nome da sala');
         return;
       }
       if (nextCode.length < 4) {
@@ -289,14 +329,16 @@ export function useRoom(playerId: string) {
       sessionRef.current = session;
       nameRef.current = name;
       codeRef.current = nextCode;
-      intendedRef.current = { code: nextCode, name, create };
+      intendedRef.current = { code: nextCode, name, create, title };
       setStatus(resume ? 'reconnecting' : 'connecting');
       setError(null);
       setCode(nextCode);
       if (!resume) {
-        setPlayers([{ id: playerId, name }]);
+        setPlayers([{ id: playerId, name, avatar: avatarRef.current }]);
         setRolls([]);
         metaSeenRef.current = false;
+        setHostName(create ? name : '');
+        setRoomTitle(create ? title : '');
       }
 
       try {
@@ -315,7 +357,7 @@ export function useRoom(playerId: string) {
             reconnectTimerRef.current = setTimeout(() => {
               const next = intendedRef.current;
               if (!next || sessionRef.current !== session) return;
-              enter(next.code, next.name, next.create, true).catch(() => undefined);
+              enter(next.code, next.name, next.create, true, next.title).catch(() => undefined);
             }, 500);
           },
         );
@@ -326,10 +368,14 @@ export function useRoom(playerId: string) {
 
         clientRef.current = client;
         const room = topics(nextCode);
-        const presence = JSON.stringify({ name: nameRef.current || name });
+        const presence = presenceJSON(nameRef.current || name, avatarRef.current);
 
         if (create) {
-          client.publish(room.meta, JSON.stringify({ createdAt: Date.now(), host: name }), true);
+          client.publish(
+            room.meta,
+            JSON.stringify({ createdAt: Date.now(), host: name, title }),
+            true,
+          );
         } else if (!resume) {
           const found =
             metaSeenRef.current ||
@@ -352,7 +398,7 @@ export function useRoom(playerId: string) {
 
         client.publish(room.presence(playerId), presence, true);
         heartbeatRef.current = setInterval(() => {
-          const latest = JSON.stringify({ name: nameRef.current || name });
+          const latest = presenceJSON(nameRef.current || name, avatarRef.current);
           clientRef.current?.publish(room.presence(playerId), latest, true);
         }, 20000);
 
@@ -365,7 +411,7 @@ export function useRoom(playerId: string) {
           reconnectTimerRef.current = setTimeout(() => {
             const next = intendedRef.current;
             if (!next) return;
-            enter(next.code, next.name, next.create, true).catch(() => undefined);
+            enter(next.code, next.name, next.create, true, next.title).catch(() => undefined);
           }, 1500);
           return;
         }
@@ -378,7 +424,7 @@ export function useRoom(playerId: string) {
   );
 
   const create = useCallback(
-    (name: string) => enter(createRoomCode(), name, true),
+    (playerName: string, title: string) => enter(createRoomCode(), playerName, true, false, title),
     [enter],
   );
 
@@ -390,7 +436,7 @@ export function useRoom(playerId: string) {
   const reconnect = useCallback(() => {
     const next = intendedRef.current;
     if (!next || clientRef.current) return;
-    enter(next.code, next.name, next.create, true).catch(() => undefined);
+    enter(next.code, nameRef.current || next.name, next.create, true, next.title).catch(() => undefined);
   }, [enter]);
 
   const publishRoll = useCallback(
@@ -418,20 +464,35 @@ export function useRoom(playerId: string) {
     [playerId, status],
   );
 
-  const updateName = useCallback(
-    (rawName: string) => {
+  const updateProfile = useCallback(
+    (rawName: string, rawAvatar?: string) => {
       const name = normalizePlayerName(rawName);
+      if (rawAvatar !== undefined) avatarRef.current = normalizeAvatar(rawAvatar);
       nameRef.current = name;
+      if (intendedRef.current && name.length >= 2) {
+        intendedRef.current = { ...intendedRef.current, name };
+      }
       const client = clientRef.current;
       const currentCode = codeRef.current;
       if (!client || !currentCode || name.length < 2) return;
-      client.publish(topics(currentCode).presence(playerId), JSON.stringify({ name }), true);
+      client.publish(
+        topics(currentCode).presence(playerId),
+        presenceJSON(name, avatarRef.current),
+        true,
+      );
       setPlayers((prev) => {
         const others = prev.filter((player) => player.id !== playerId);
-        return [...others, { id: playerId, name }].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        return [...others, { id: playerId, name, avatar: avatarRef.current }].sort((a, b) =>
+          a.name.localeCompare(b.name, 'pt-BR'),
+        );
       });
     },
     [playerId],
+  );
+
+  const updateName = useCallback(
+    (rawName: string) => updateProfile(rawName),
+    [updateProfile],
   );
 
   useEffect(() => {
@@ -439,7 +500,7 @@ export function useRoom(playerId: string) {
       if (state !== 'active') return;
       const next = intendedRef.current;
       if (!next || clientRef.current) return;
-      enter(next.code, next.name, next.create, true).catch(() => undefined);
+      enter(next.code, nameRef.current || next.name, next.create, true, next.title).catch(() => undefined);
     });
     return () => sub.remove();
   }, [enter]);
@@ -454,6 +515,8 @@ export function useRoom(playerId: string) {
   return {
     status,
     code,
+    hostName,
+    roomTitle,
     players,
     rolls,
     error,
@@ -463,5 +526,6 @@ export function useRoom(playerId: string) {
     reconnect,
     publishRoll,
     updateName,
+    updateProfile,
   };
 }

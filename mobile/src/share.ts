@@ -22,10 +22,10 @@ function roomLink(code: string): string | null {
   return url.toString();
 }
 
-export function roomInviteText(code: string): string {
+export function roomInviteText(code: string, title?: string): string {
   const link = roomLink(code);
   const boxed = [
-    'D20X · sala da mesa',
+    title ? `D20X · ${title}` : 'D20X · sala da mesa',
     '',
     '┌──────────────┐',
     `│    ${code}    │`,
@@ -46,12 +46,12 @@ export async function copyRoomCode(code: string): Promise<boolean> {
   }
 }
 
-export async function shareRoomCode(code: string): Promise<'shared' | 'none'> {
-  const message = roomInviteText(code);
+export async function shareRoomCode(code: string, title?: string): Promise<'shared' | 'none'> {
+  const message = roomInviteText(code, title);
 
   if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
     try {
-      await navigator.share({ title: `D20X · sala ${code}`, text: message });
+      await navigator.share({ title: title ? `D20X · ${title}` : `D20X · sala ${code}`, text: message });
       return 'shared';
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return 'none';
@@ -59,7 +59,7 @@ export async function shareRoomCode(code: string): Promise<'shared' | 'none'> {
   }
 
   try {
-    await Share.share({ message, title: `D20X · sala ${code}` });
+    await Share.share({ message, title: title ? `D20X · ${title}` : `D20X · sala ${code}` });
     return 'shared';
   } catch {
     return 'none';

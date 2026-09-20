@@ -1,12 +1,18 @@
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { CustomDieSlot } from '../customDice';
 import { MULTI_SOUND_OPTIONS, SINGLE_SOUND_OPTIONS, type MultiSoundId, type SingleSoundId } from '../sound';
 import { THEME_LIST, type ThemeId, useTheme, useThemedStyles, type ThemeColors } from '../theme';
-import type { SessionStats } from '../types';
+import type { DiceSort, SessionStats } from '../types';
+import { CustomDiceSettings } from './CustomDiceSettings';
+import { ProfileEditor } from './ProfileEditor';
 
 type Props = {
   playerName: string;
-  onChangeName: (name: string) => void;
+  playerAvatar: string;
+  playerId: string;
+  onSaveName: (name: string) => void;
+  onChangeAvatar: (avatar: string) => void;
   themeId: ThemeId;
   onChangeTheme: (id: ThemeId) => void;
   soundEnabled: boolean;
@@ -27,6 +33,10 @@ type Props = {
   appVersion: string;
   updateHint: string;
   onCheckUpdate: () => void;
+  customSlots: Array<CustomDieSlot | null>;
+  onChangeCustomSlots: (slots: Array<CustomDieSlot | null>) => void;
+  diceSort: DiceSort;
+  onChangeDiceSort: (sort: DiceSort) => void;
 };
 
 function ToggleRow({
@@ -121,7 +131,10 @@ function SoundChoice({
 
 export function SettingsPanel({
   playerName,
-  onChangeName,
+  playerAvatar,
+  playerId,
+  onSaveName,
+  onChangeAvatar,
   themeId,
   onChangeTheme,
   soundEnabled,
@@ -142,6 +155,10 @@ export function SettingsPanel({
   appVersion,
   updateHint,
   onCheckUpdate,
+  customSlots,
+  onChangeCustomSlots,
+  diceSort,
+  onChangeDiceSort,
 }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -165,19 +182,13 @@ export function SettingsPanel({
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.section}>Perfil</Text>
-        <View style={styles.card}>
-          <Text style={styles.fieldLabel}>Nome de exibição</Text>
-          <TextInput
-            value={playerName}
-            onChangeText={onChangeName}
-            placeholder="Ex: Luan"
-            placeholderTextColor={colors.placeholder}
-            maxLength={18}
-            autoCapitalize="words"
-            style={styles.input}
-          />
-          <Text style={styles.help}>É assim que você aparece na sala para o resto da mesa.</Text>
-        </View>
+        <ProfileEditor
+          playerId={playerId}
+          playerName={playerName}
+          playerAvatar={playerAvatar}
+          onSaveName={onSaveName}
+          onChangeAvatar={onChangeAvatar}
+        />
 
         <Text style={styles.section}>Tema</Text>
         <View style={styles.themeGrid}>
@@ -260,6 +271,31 @@ export function SettingsPanel({
               styles={styles}
             />
           ))}
+        </View>
+
+        <CustomDiceSettings slots={customSlots} onChange={onChangeCustomSlots} />
+
+        <Text style={styles.section}>Ordem dos dados</Text>
+        <View style={styles.card}>
+          <Pressable style={styles.soundRow} onPress={() => onChangeDiceSort('rolled')}>
+            <View style={styles.soundText}>
+              <Text style={styles.soundName}>Ordem da rolagem</Text>
+              <Text style={styles.soundHint}>Mostra os dados na ordem em que caíram</Text>
+            </View>
+            <View style={[styles.radio, diceSort === 'rolled' && styles.radioOn]}>
+              {diceSort === 'rolled' ? <View style={styles.radioDot} /> : null}
+            </View>
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable style={styles.soundRow} onPress={() => onChangeDiceSort('asc')}>
+            <View style={styles.soundText}>
+              <Text style={styles.soundName}>Menor para o maior</Text>
+              <Text style={styles.soundHint}>Ordena os valores de cada grupo</Text>
+            </View>
+            <View style={[styles.radio, diceSort === 'asc' && styles.radioOn]}>
+              {diceSort === 'asc' ? <View style={styles.radioDot} /> : null}
+            </View>
+          </Pressable>
         </View>
 
         <Text style={styles.section}>Sessão</Text>

@@ -47,7 +47,7 @@ function createStyles(colors: ThemeColors) {
   },
   compact: {
     minWidth: 22,
-    height: 22,
+    height: 20,
     paddingHorizontal: 5,
   },
   value: {

@@ -73,9 +73,38 @@ function evaluateArithmetic(input: string): number {
   return result;
 }
 
+function mergeResults(original: string, parts: RollResult[]): RollResult {
+  return {
+    rawExpression: original,
+    total: parts.reduce((sum, part) => sum + part.total, 0),
+    dice: parts.flatMap((part) => part.dice),
+    groups: parts.flatMap((part) => part.groups),
+    maxCrits: parts.reduce((sum, part) => sum + part.maxCrits, 0),
+    minCrits: parts.reduce((sum, part) => sum + part.minCrits, 0),
+  };
+}
+
 export function parseAndRollExpression(inputStr: string): RollResult | null {
   const expr = inputStr.toLowerCase().replace(/\s+/g, '');
   if (!expr) return null;
+
+  const repeated = expr.match(/^(\d{1,2})#(.+)$/);
+  if (repeated) {
+    const times = Number.parseInt(repeated[1], 10);
+    const inner = repeated[2];
+    if (times < 1 || times > 20) {
+      throw new Error('Repetições do # ficam entre 1 e 20');
+    }
+    if (!inner || inner.includes('#')) {
+      throw new Error('Fórmula depois do # inválida');
+    }
+    const parts: RollResult[] = [];
+    for (let i = 0; i < times; i += 1) {
+      const part = parseAndRollExpression(inner);
+      if (part) parts.push(part);
+    }
+    return parts.length ? mergeResults(inputStr, parts) : null;
+  }
 
   const allDice: DieRoll[] = [];
   const groups: DiceGroup[] = [];

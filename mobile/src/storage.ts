@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { emptyCustomSlots, normalizeCustomSlots } from './customDice';
 import { capHistory, normalizeHistory } from './history';
 import { createPlayerId } from './room';
 import { isMultiSoundId, isSingleSoundId } from './sound';
 import { isThemeId } from './theme';
 import type { PersistedSession, SessionStats } from './types';
+import { isDiceSort } from './format';
+import { normalizeAvatar } from './profile';
 
 export const STORAGE_KEY = '@calculadora-dados/session';
 
@@ -29,6 +32,9 @@ export const defaultSession: PersistedSession = {
   playerName: '',
   playerId: '',
   dismissedUpdateVersion: '',
+  customSlots: emptyCustomSlots(),
+  diceSort: 'rolled',
+  playerAvatar: '',
 };
 
 export async function loadSession(): Promise<PersistedSession> {
@@ -70,6 +76,9 @@ export async function loadSession(): Promise<PersistedSession> {
       playerId: parsed.playerId || createPlayerId(),
       dismissedUpdateVersion:
         typeof parsed.dismissedUpdateVersion === 'string' ? parsed.dismissedUpdateVersion : '',
+      customSlots: normalizeCustomSlots(parsed.customSlots),
+      diceSort: isDiceSort(parsed.diceSort) ? parsed.diceSort : 'rolled',
+      playerAvatar: normalizeAvatar(parsed.playerAvatar),
     };
   } catch {
     return { ...defaultSession, playerId: createPlayerId() };
